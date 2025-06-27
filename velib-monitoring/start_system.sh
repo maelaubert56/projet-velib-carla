@@ -77,6 +77,35 @@ EOF
     fi
 }
 
+# Fonction pour installer les dépendances Python
+install_python_dependencies() {
+    print_status "Installation des dépendances Python..."
+    
+    # Créer un environnement virtuel s'il n'existe pas
+    if [ ! -d "venv" ]; then
+        print_status "Création de l'environnement virtuel Python..."
+        python3 -m venv venv
+        print_success "Environnement virtuel créé"
+    fi
+    
+    # Activer l'environnement virtuel et installer les dépendances
+    print_status "Installation des packages dans l'environnement virtuel..."
+    source venv/bin/activate
+    pip install -r requirements.txt
+    
+    print_success "Dépendances Python installées dans l'environnement virtuel"
+}
+
+# Fonction helper pour exécuter Python avec l'environnement virtuel
+run_python() {
+    if [ -d "venv" ]; then
+        source venv/bin/activate
+        python "$@"
+    else
+        python3 "$@"
+    fi
+}
+
 # Fonction pour démarrer les services Docker
 start_docker_services() {
     print_status "Démarrage des services Docker..."
@@ -104,7 +133,7 @@ setup_kafka() {
     # Attendre que Kafka soit prêt
     sleep 5
     
-    python scripts/create_kafka_topics.py
+    run_python scripts/create_kafka_topics.py
     print_success "Topics Kafka configurés"
 }
 
@@ -112,7 +141,7 @@ setup_kafka() {
 setup_mongodb() {
     print_status "Configuration de MongoDB..."
     
-    python scripts/setup_mongodb.py
+    run_python scripts/setup_mongodb.py
     print_success "MongoDB configuré"
 }
 
@@ -120,8 +149,12 @@ setup_mongodb() {
 start_producer() {
     print_status "Démarrage du producer Vélib'..."
     
-    # Démarrer en arrière-plan
-    nohup python src/data_ingestion/velib_producer.py > logs/producer.log 2>&1 &
+    # Démarrer en arrière-plan avec l'environnement virtuel
+    if [ -d "venv" ]; then
+        nohup venv/bin/python src/data_ingestion/velib_producer.py > logs/producer.log 2>&1 &
+    else
+        nohup python3 src/data_ingestion/velib_producer.py > logs/producer.log 2>&1 &
+    fi
     PRODUCER_PID=$!
     echo $PRODUCER_PID > logs/producer.pid
     
@@ -132,8 +165,12 @@ start_producer() {
 start_processor() {
     print_status "Démarrage du processeur..."
     
-    # Démarrer en arrière-plan
-    nohup python src/processor.py > logs/processor.log 2>&1 &
+    # Démarrer en arrière-plan avec l'environnement virtuel
+    if [ -d "venv" ]; then
+        nohup venv/bin/python src/processor.py > logs/processor.log 2>&1 &
+    else
+        nohup python3 src/processor.py > logs/processor.log 2>&1 &
+    fi
     PROCESSOR_PID=$!
     echo $PROCESSOR_PID > logs/processor.pid
     
@@ -144,8 +181,12 @@ start_processor() {
 start_dashboard() {
     print_status "Démarrage du dashboard Streamlit..."
     
-    # Démarrer en arrière-plan avec le bon fichier
-    nohup streamlit run streamlit.py --server.port 8501 --server.address 0.0.0.0 > logs/streamlit.log 2>&1 &
+    # Démarrer en arrière-plan avec l'environnement virtuel
+    if [ -d "venv" ]; then
+        nohup venv/bin/streamlit run streamlit.py --server.port 8501 --server.address 0.0.0.0 > logs/streamlit.log 2>&1 &
+    else
+        nohup streamlit run streamlit.py --server.port 8501 --server.address 0.0.0.0 > logs/streamlit.log 2>&1 &
+    fi
     STREAMLIT_PID=$!
     echo $STREAMLIT_PID > logs/streamlit.pid
     
@@ -157,7 +198,8 @@ wait_for_data() {
     print_status "Attente des premières données..."
     
     for i in {1..30}; do
-        DATA_COUNT=$(python -c "
+        if [ -d "venv" ]; then
+            DATA_COUNT=$(venv/bin/python -c "
 import pymongo
 try:
     client = pymongo.MongoClient('mongodb://admin:password123@localhost:27017/')
@@ -167,6 +209,18 @@ try:
 except:
     print(0)
 " 2>/dev/null)
+        else
+            DATA_COUNT=$(python3 -c "
+import pymongo
+try:
+    client = pymongo.MongoClient('mongodb://admin:password123@localhost:27017/')
+    db = client['velib_monitoring']
+    count = db.stations_realtime.count_documents({})
+    print(count)
+except:
+    print(0)
+" 2>/dev/null)
+        fi
         
         if [ "$DATA_COUNT" -gt 0 ]; then
             print_success "Données détectées ($DATA_COUNT stations)"
@@ -248,6 +302,9 @@ main() {
     
     # Vérifications
     check_requirements
+    
+    # Installation des dépendances
+    install_python_dependencies
     
     # Démarrage des services
     start_docker_services
