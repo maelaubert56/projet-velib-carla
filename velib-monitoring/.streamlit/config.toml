@@ -1,0 +1,14 @@
+[browser]
+gatherUsageStats = false
+
+[runner]
+# Désactivation du message d'accueil qui demande un email
+fastReruns = true
+
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+
+[ui]
+hideTopBar = false
