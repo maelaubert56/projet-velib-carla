@@ -147,10 +147,6 @@ Collections créées:
 - station_anomalies: Anomalies détectées (TTL: 7 jours)  
 - usage_patterns: Patterns d'usage agrégés (TTL: 90 jours)
 
-Prérequis:
-1. MongoDB doit être démarré: docker-compose up -d
-2. Les variables d'environnement doivent être configurées dans .env
-
 Variables d'environnement:
 - MONGODB_URI (défaut: mongodb://admin:password123@localhost:27017/)
 - MONGODB_DATABASE (défaut: velib_monitoring)

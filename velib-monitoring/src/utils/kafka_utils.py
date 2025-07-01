@@ -9,115 +9,46 @@ logger = logging.getLogger(__name__)
 
 class KafkaManager:
     """Gestionnaire pour les opérations Kafka"""
-    
+    # Initialisation du gestionnaire Kafka -> client KafkaAdmin
     def __init__(self, bootstrap_servers: str = 'localhost:9092'):
         self.bootstrap_servers = bootstrap_servers
         self.admin_client = KafkaAdminClient(
             bootstrap_servers=bootstrap_servers,
             client_id='velib_admin'
         )
-    
+    # Création des topics Kafka -> Q1
     def create_topics(self, topics: List[Dict[str, Any]]) -> bool:
-        """Crée les topics Kafka"""
+        #Crée les topics Kafka via une liste
         topic_list = []
-        
-        for topic_config in topics:
+        # config des topics -> def
+        for topic in topics:
             topic = NewTopic(
-                name=topic_config['name'],
-                num_partitions=topic_config.get('partitions', 3),
-                replication_factor=topic_config.get('replication_factor', 1)
+                name=topic['name'],
+                num_partitions=topic.get('partitions', 3),
+                replication_factor=topic.get('replication_factor', 1)
             )
             topic_list.append(topic)
-        
+
         try:
             fs = self.admin_client.create_topics(new_topics=topic_list, validate_only=False)
-            
-            # Compteurs pour le reporting
-            created_count = 0
-            existing_count = 0
-            error_count = 0
-            
-            # Attendre la création de tous les topics
-            for topic, f in fs.items():
-                try:
-                    f.result()  # The result itself is None
-                    logger.info(f"✅ Topic {topic} créé avec succès")
-                    created_count += 1
-                except TopicAlreadyExistsError:
-                    logger.info(f"ℹ️  Topic {topic} existe déjà")
-                    existing_count += 1
-                except Exception as e:
-                    logger.error(f"❌ Erreur lors de la création du topic {topic}: {e}")
-                    error_count += 1
-            
-            # Summary
-            total_topics = len(topic_list)
-            logger.info(f"📊 Résumé: {total_topics} topics traités")
-            if created_count > 0:
-                logger.info(f"   ✅ {created_count} créés")
-            if existing_count > 0:
-                logger.info(f"   ℹ️  {existing_count} existaient déjà")
-            if error_count > 0:
-                logger.error(f"   ❌ {error_count} erreurs")
-            
-            # Considérer comme succès si au moins aucune erreur grave
-            return error_count == 0
-            
+            print(f"Topics créés : {[topic.name for topic in topic_list]}")
+            return True
         except Exception as e:
-            logger.error(f"❌ Erreur lors de la création des topics: {e}")
+            print(f"Erreur lors de la création des topics: {e}")
             return False
     
+    # sert à checker si les topics existent déjà -> intéressant pour print
     def list_topics(self) -> List[str]:
         """Liste tous les topics disponibles"""
         try:
-            # Utiliser la méthode correcte sans timeout parameter
             from kafka import KafkaConsumer
             consumer = KafkaConsumer(bootstrap_servers=self.bootstrap_servers)
             topics = consumer.topics()
             consumer.close()
             return list(topics)
         except Exception as e:
-            logger.error(f"Erreur lors de la récupération des topics: {e}")
+            print(f"Erreur lors de la récupération des topics: {e}")
             return []
-    
-    def delete_topics(self, topics: List[str]) -> bool:
-        """Supprime les topics spécifiés"""
-        try:
-            fs = self.admin_client.delete_topics(topics, timeout=30)
-            
-            for topic, f in fs.items():
-                try:
-                    f.result()
-                    logger.info(f"Topic {topic} supprimé avec succès")
-                except Exception as e:
-                    logger.error(f"Erreur lors de la suppression du topic {topic}: {e}")
-                    return False
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Erreur lors de la suppression des topics: {e}")
-            return False
-    
-    def get_topic_config(self, topics: List[str]) -> Dict[str, Dict]:
-        """Récupère la configuration des topics"""
-        try:
-            resources = [ConfigResource(ConfigResourceType.TOPIC, topic) for topic in topics]
-            configs = self.admin_client.describe_configs(config_resources=resources)
-            
-            result = {}
-            for resource, config_response in configs.items():
-                if resource.resource_type == ConfigResourceType.TOPIC:
-                    result[resource.name] = {
-                        config.name: config.value 
-                        for config in config_response.configs.values()
-                    }
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Erreur lors de la récupération de la configuration: {e}")
-            return {}
     
     def create_producer(self, **kwargs) -> KafkaProducer:
         """Crée un producer Kafka avec la configuration par défaut"""
@@ -156,10 +87,10 @@ class KafkaManager:
         """Vérifie la connexion au cluster Kafka"""
         try:
             topics = self.list_topics()
-            logger.info(f"Connexion Kafka OK. Topics disponibles: {len(topics)}")
+            print(f"Connexion Kafka OK. Topics disponibles: {len(topics)}")
             return True
         except Exception as e:
-            logger.error(f"Erreur de connexion Kafka: {e}")
+            print(f"Erreur de connexion Kafka: {e}")
             return False
     
     def close(self):

@@ -49,9 +49,10 @@ class VelibAPIClient:
     
     def get_station_information(self) -> Optional[Dict]:
         """Récupère les informations statiques des stations"""
+        # récupère toutes les données par station de la table station_information
         for base_url in [self.base_url] + self.alternative_urls:
             try:
-                url = f"{base_url}/station_information.json"
+                url = f"{base_url}/station_information.json" 
                 logger.info(f"Tentative de récupération depuis: {base_url}")
                 response = self.session.get(url, timeout=15)
                 response.raise_for_status()
