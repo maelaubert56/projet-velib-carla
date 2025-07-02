@@ -7,21 +7,20 @@ import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# Désactiver les warnings SSL pour les certificats auto-signés
+# Disable SSL warnings for self-signed certificates
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class VelibAPIClient:
-    """Client pour l'API Vélib' Métropole avec gestion SSL flexible"""
+    """Client for the Vélib' Métropole API"""
     
     def __init__(self, base_url: str = "https://velib-metropole-opendata.smovengo.cloud/opendata/Velib_Metropole"):
         self.base_url = base_url
         self.session = requests.Session()
         
-        # Configuration SSL flexible
-        self.session.verify = False  # Désactiver la vérification SSL stricte
+        self.session.verify = False  # Disable strict SSL verification
         
         # Headers
         self.session.headers.update({
@@ -31,7 +30,7 @@ class VelibAPIClient:
             'Connection': 'keep-alive'
         })
         
-        # Configuration des retries
+        # Configure retries for handling transient errors
         retry_strategy = Retry(
             total=3,
             backoff_factor=1,
@@ -40,74 +39,72 @@ class VelibAPIClient:
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
-        
-        # URLs alternatives si l'URL principale ne fonctionne pas
         self.alternative_urls = [
             "https://velib-metropole-opendata.smoove.pro/opendata/Velib_Metropole",
             "https://velib-metropole-opendata.smovengo.cloud/opendata/Velib_Metropole"
         ]
     
     def get_station_information(self) -> Optional[Dict]:
-        """Récupère les informations statiques des stations"""
-        # récupère toutes les données par station de la table station_information
+        """Fetches static information about stations from the API"""
+        # retrieve all data per station of status_information.json
         for base_url in [self.base_url] + self.alternative_urls:
             try:
                 url = f"{base_url}/station_information.json" 
-                logger.info(f"Tentative de récupération depuis: {base_url}")
+                logger.info(f"Attempting to fetch from: {base_url}")
                 response = self.session.get(url, timeout=15)
                 response.raise_for_status()
                 data = response.json()
-                logger.info(f"✅ Succès: {len(data.get('data', {}).get('stations', []))} stations récupérées")
+                logger.info(f"Success: {len(data.get('data', {}).get('stations', []))} stations retrieved")
                 return data
             except Exception as e:
-                logger.warning(f"⚠️ Échec avec {base_url}: {e}")
+                logger.warning(f"Failed to fetch from {base_url}: {e}")
                 continue
         
-        logger.error("❌ Impossible de récupérer les informations stations depuis toutes les URLs")
+        logger.error("Unable to retrieve station information from all URLs")
         return None
     
     def get_station_status(self) -> Optional[Dict]:
-        """Récupère le statut en temps réel des stations"""
+        """Fetches real-time status of stations"""
         for base_url in [self.base_url] + self.alternative_urls:
             try:
                 url = f"{base_url}/station_status.json"
                 response = self.session.get(url, timeout=15)
                 response.raise_for_status()
                 data = response.json()
-                logger.info(f"✅ Statut récupéré: {len(data.get('data', {}).get('stations', []))} stations")
+                logger.info(f"Status retrieved: {len(data.get('data', {}).get('stations', []))} stations")
                 return data
             except Exception as e:
-                logger.warning(f"⚠️ Échec statut avec {base_url}: {e}")
+                logger.warning(f"Failed to fetch status from {base_url}: {e}")
                 continue
         
-        logger.error("❌ Impossible de récupérer le statut depuis toutes les URLs")
+        logger.error("Unable to retrieve status from all URLs")
         return None
     
     def get_all_stations_data(self) -> Optional[Dict]:
-        """Récupère toutes les données des stations (infos + statut)"""
+        """"Fetches all station data (information + status)"""
         try:
             station_info = self.get_station_information()
             station_status = self.get_station_status()
             
             if not station_info or not station_status:
-                logger.error("❌ Impossible de récupérer les données station_info ou station_status")
+                logger.error("Unable to retrieve station_info or station_status data")
                 return None
             
-            # Vérifier la structure des données
+            # Verify the structure of the data
             info_data = station_info.get('data', {})
             status_data = station_status.get('data', {})
             
             if not info_data.get('stations') or not status_data.get('stations'):
-                logger.error("❌ Structure de données invalide dans la réponse API")
+                logger.error("Invalid data structure in API response")
                 return None
             
-            # Créer un dictionnaire des informations par station_id
+            # Create a dictionary of station information by station_id
             stations_info_dict = {
                 station['station_id']: station 
                 for station in info_data['stations']
             }
             
-            # Enrichir les données de statut avec les informations statiques
+            # Enrich status data with static information
             enriched_data = []
             current_timestamp = int(time.time())
             
@@ -122,7 +119,7 @@ class VelibAPIClient:
                     }
                     enriched_data.append(combined_data)
             
-            logger.info(f"✅ Données enrichies pour {len(enriched_data)} stations")
+            logger.info(f"Enriched data for {len(enriched_data)} stations")
             
             return {
                 'last_updated': station_status.get('last_updated', current_timestamp),
@@ -132,31 +129,31 @@ class VelibAPIClient:
             }
             
         except Exception as e:
-            logger.error(f"❌ Erreur dans get_all_stations_data: {e}")
+            logger.error(f"Error in get_all_stations_data: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return None
     
     def monitor_stations(self, callback, interval: int = 30):
-        """Monitore les stations et appelle le callback avec les nouvelles données"""
-        logger.info(f"Démarrage du monitoring des stations (intervalle: {interval}s)")
+        """Monitors stations and calls the callback with new data"""
+        logger.info(f"Starting station monitoring (interval: {interval}s)")
         
         while True:
             try:
                 data = self.get_all_stations_data()
                 if data and 'stations' in data and len(data['stations']) > 0:
                     callback(data)
-                    logger.info(f"✅ Données envoyées pour {len(data['stations'])} stations")
+                    logger.info(f"Data sent for {len(data['stations'])} stations")
                 else:
-                    logger.warning("⚠️ Aucune donnée valide récupérée")
+                    logger.warning("No valid data retrieved")
                 
                 time.sleep(interval)
                 
             except KeyboardInterrupt:
-                logger.info("🛑 Arrêt du monitoring (Ctrl+C)")
+                logger.info("Monitoring stopped")
                 break
             except Exception as e:
-                logger.error(f"❌ Erreur dans le monitoring: {e}")
-                logger.error(f"Type d'erreur: {type(e).__name__}")
+                logger.error(f"Error during monitoring: {e}")
+                logger.error(f"Error type: {type(e).__name__}")
                 # Attendre un peu avant de réessayer
                 time.sleep(min(interval, 10))

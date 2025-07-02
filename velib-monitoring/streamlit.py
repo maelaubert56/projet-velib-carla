@@ -10,20 +10,20 @@ from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 
-# Configuration de la page
+# Page configuration
 st.set_page_config(
-    page_title="Vélib' Paris - Monitoring Temps Réel",
+    page_title="Vélib' Paris - Real Time Monitoring",
     page_icon="🚴‍♂️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Charger les variables d'environnement
+# Load environment variables
 load_dotenv()
 
 @st.cache_resource
 def init_mongodb():
-    """Initialise la connexion MongoDB"""
+    """Initialize MongoDB connexion"""
     try:
         mongo_uri = os.getenv('MONGODB_URI', 'mongodb://admin:password123@localhost:27017/')
         mongo_db = os.getenv('MONGODB_DATABASE', 'velib_monitoring')
@@ -31,12 +31,12 @@ def init_mongodb():
         database = client[mongo_db]
         return database
     except Exception as e:
-        st.error(f"Erreur de connexion MongoDB: {e}")
+        st.error(f"Error of connexion MongoDB: {e}")
         return None
 
 @st.cache_data(ttl=30)
 def load_realtime_data():
-    """Charge les données temps réel depuis MongoDB"""
+    """Load real time data from MongoDB"""
     db = init_mongodb()
     if db is None:
         return pd.DataFrame()
@@ -54,24 +54,24 @@ def load_realtime_data():
             return pd.DataFrame()
             
     except Exception as e:
-        st.error(f"Erreur lors du chargement des données: {e}")
+        st.error(f"Error during data loading: {e}")
         return pd.DataFrame()
 
 def create_paris_map(df):
-    """Crée une carte de Paris avec les stations"""
+    """Creates a map of Paris with Vélib' stations"""
     if df.empty:
         return None
     
-    # Centre de Paris
+    # Paris centre
     paris_center = [48.8566, 2.3522]
     
-    # Créer la carte
+    # Map creation
     m = folium.Map(location=paris_center, zoom_start=12)
     
-    # Ajouter les stations (limiter à 100 pour performance)
+    # Add stations (max 100)
     for idx, row in df.head(100).iterrows():
         if pd.notna(row.get('lat')) and pd.notna(row.get('lon')):
-            # Couleur selon la disponibilité
+            # CColor depending on availibility 
             if row.get('occupancy_rate', 0) > 70:
                 color = 'green'
                 icon = 'ok-sign'
@@ -84,10 +84,10 @@ def create_paris_map(df):
             
             popup_text = f"""
             <b>{row.get('name', 'Station inconnue')}</b><br>
-            Vélos disponibles: {row.get('num_bikes_available', 0)}<br>
-            Docks disponibles: {row.get('num_docks_available', 0)}<br>
-            Capacité totale: {row.get('capacity', 0)}<br>
-            Taux d'occupation: {row.get('occupancy_rate', 0):.1f}%
+            Availables Bikes: {row.get('num_bikes_available', 0)}<br>
+            Available Docks: {row.get('num_docks_available', 0)}<br>
+            Total Capacity: {row.get('capacity', 0)}<br>
+            Occupation Rate: {row.get('occupancy_rate', 0):.1f}%
             """
             
             folium.Marker(
@@ -99,66 +99,65 @@ def create_paris_map(df):
     return m
 
 def main():
-    """Interface principale Streamlit"""
+    """Streamlit Interface"""
     
     # En-tête
-    st.title("🚴‍♂️ Vélib' Paris - Monitoring Temps Réel")
+    st.title("🚴‍♂️ Vélib' Paris - Real Time Monitoring")
     st.markdown("---")
     
-    # Sidebar pour les contrôles
-    st.sidebar.title("Contrôles")
+    # Sidebar for controls and settings
+    st.sidebar.title("Controls")
     
-    # Bouton de refresh manuel
-    if st.sidebar.button("🔄 Actualiser les données"):
+    # Manually refresh the site via button
+    if st.sidebar.button("🔄 Refresh data"):
         st.cache_data.clear()
         st.rerun()
     
-    # Charger les données
-    with st.spinner("Chargement des données..."):
+    # Load data
+    with st.spinner("Data loading..."):
         realtime_df = load_realtime_data()
     
-    # Vérifier si on a des données
+    # Check for data
     if realtime_df.empty:
-        st.warning("⚠️ Aucune donnée temps réel disponible.")
+        st.warning("No real time data is available")
         st.info("Vérifiez que le producer et le processeur sont démarrés.")
         return
     
-    # Message de succès
-    st.success(f"✅ {len(realtime_df)} stations chargées avec succès !")
+    st.success(f"{len(realtime_df)} stations loaded successfully !")
     
-    # Métriques principales
+    # principles metrics
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         total_stations = len(realtime_df['station_id'].unique())
-        st.metric("🚉 Stations actives", total_stations)
+        st.metric("🚉 Active Stations", total_stations)
     
     with col2:
         total_bikes = int(realtime_df['num_bikes_available'].sum())
-        st.metric("🚴 Vélos disponibles", total_bikes)
+        st.metric("🚴 Available Bikes", total_bikes)
     
     with col3:
         total_docks = int(realtime_df['num_docks_available'].sum())
-        st.metric("🅿️ Docks disponibles", total_docks)
+        st.metric("🅿️ Available Docks", total_docks)
     
     with col4:
         avg_occupancy = realtime_df['occupancy_rate'].mean()
-        st.metric("📊 Taux d'occupation moyen", f"{avg_occupancy:.1f}%")
+        st.metric("📊 Average Occupation Rate", f"{avg_occupancy:.1f}%")
     
     st.markdown("---")
     
     # Onglets principaux
-    tab1, tab2 = st.tabs(["🗺️ Carte", "📈 Analyse"])
+    tab1, tab2 = st.tabs(["🗺️ Map", "📈 Analysis"])
     
     with tab1:
-        st.subheader("Carte des stations Vélib'")
+        st.subheader("Velib stations map'")
         
         # Filtres pour la carte
         col1, col2 = st.columns(2)
         with col1:
-            min_occupancy = st.slider("Taux d'occupation minimum", 0, 100, 0)
+            min_occupancy = st.slider("Minimum occupancy rate", 0, 100, 0)
         with col2:
-            max_occupancy = st.slider("Taux d'occupation maximum", 0, 100, 100)
+            max_occupancy = st.slider("Maximum occupancy rate", 0, 100, 100)
         
         # Filtrer les données
         filtered_df = realtime_df[
@@ -166,7 +165,7 @@ def main():
             (realtime_df['occupancy_rate'] <= max_occupancy)
         ]
         
-        st.info(f"Affichage de {len(filtered_df)} stations (max 100 pour performance)")
+        st.info(f"Display of {len(filtered_df)} stations (max 100 for performance)")
         
         # Créer et afficher la carte
         if not filtered_df.empty:
@@ -174,18 +173,18 @@ def main():
             if paris_map:
                 st_folium(paris_map, width=700, height=500)
         else:
-            st.warning("Aucune station ne correspond aux filtres sélectionnés.")
+            st.warning("No stations fit the corresponding filter.")
     
     with tab2:
-        st.subheader("Analyse des données")
+        st.subheader("Data Analysis")
         
         # Graphique de distribution des vélos
         fig_hist = px.histogram(
             realtime_df,
             x='num_bikes_available',
             nbins=20,
-            title="Distribution du nombre de vélos disponibles",
-            labels={'num_bikes_available': 'Vélos disponibles', 'count': 'Nombre de stations'}
+            title="Distribution of available bikes number",
+            labels={'num_bikes_available': 'Available bikes', 'count': 'Stations number'}
         )
         st.plotly_chart(fig_hist, use_container_width=True)
         
@@ -193,34 +192,34 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("🔝 Top 10 - Stations les plus occupées")
+            st.subheader("🔝 Top 10 - Stations the most occupied")
             top_occupied = realtime_df.nlargest(10, 'occupancy_rate')[['name', 'occupancy_rate', 'num_bikes_available']]
             fig_top = px.bar(
                 top_occupied,
                 x='occupancy_rate',
                 y='name',
                 orientation='h',
-                title="Taux d'occupation (%)"
+                title="Occupation Rate (%)"
             )
             fig_top.update_layout(height=400)
             st.plotly_chart(fig_top, use_container_width=True)
         
         with col2:
-            st.subheader("🔻 Top 10 - Stations les moins occupées")
+            st.subheader("🔻 Top 10 - Stations the less occupied")
             bottom_occupied = realtime_df.nsmallest(10, 'occupancy_rate')[['name', 'occupancy_rate', 'num_bikes_available']]
             fig_bottom = px.bar(
                 bottom_occupied,
                 x='occupancy_rate',
                 y='name',
                 orientation='h',
-                title="Taux d'occupation (%)",
+                title="Occupation Rate (%)",
                 color_discrete_sequence=['orange']
             )
             fig_bottom.update_layout(height=400)
             st.plotly_chart(fig_bottom, use_container_width=True)
         
         # Tableau des données
-        st.subheader("📊 Données des stations")
+        st.subheader("📊 Stations Data")
         
         # Sélection de colonnes à afficher
         columns_to_show = ['name', 'num_bikes_available', 'num_docks_available', 'capacity', 'occupancy_rate', 'status_category']
@@ -231,8 +230,8 @@ def main():
     
     # Footer
     st.markdown("---")
-    st.markdown("*Dashboard mis à jour automatiquement toutes les 30 secondes*")
-    st.markdown(f"*Dernière mise à jour: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+    st.markdown("*Dashboard updated automatically every 30 seconds*")
+    st.markdown(f"*Last update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
 
 if __name__ == "__main__":
     main()

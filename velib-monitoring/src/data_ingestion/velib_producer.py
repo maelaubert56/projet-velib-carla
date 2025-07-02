@@ -12,24 +12,24 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from data_ingestion.api_client import VelibAPIClient
 
-# Charger les variables d'environnement
+# Load environment variables from .env file
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class VelibKafkaProducer:
-    """Producer Kafka pour les données Vélib'"""
+    """Kafka Producer for Vélib' data"""
     
     def __init__(self):
         self.bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
         self.api_url = os.getenv('VELIB_API_URL')
         self.update_interval = int(os.getenv('UPDATE_INTERVAL', '30'))
         
-        # Initialiser le client API
+        # Initialize API Client
         self.api_client = VelibAPIClient(self.api_url)
         
-        # Initialiser le producer Kafka
+        # Initialize Kafka Producer
         self.producer = KafkaProducer(
             bootstrap_servers=self.bootstrap_servers,
             value_serializer=lambda v: json.dumps(v).encode('utf-8'),
@@ -39,37 +39,37 @@ class VelibKafkaProducer:
             max_in_flight_requests_per_connection=1
         )
         
-        # Topics Kafka
+        # Kafka topics
         self.topics = {
             'station_status': 'station_status_topic',
             'available_bikes': 'available_bikes_topic',
             'available_docks': 'available_docks_topic',
-            'station_info': 'station_info_topic'
+            'station_info': 'station_info_topic' 
         }
         
-        logger.info("VelibKafkaProducer initialisé")
+        logger.info("VelibKafkaProducer initialized")
     
     def send_to_kafka(self, topic: str, key: str, value: Dict[Any, Any]):
-        """Envoie un message vers Kafka"""
+        """Send a message to a Kafka topic"""
         try:
             future = self.producer.send(topic, key=key, value=value)
-            self.producer.flush()  # Assure l'envoi immédiat
+            self.producer.flush() # immediate sending
             return True
         except KafkaError as e:
-            logger.error(f"Erreur Kafka pour topic {topic}: {e}")
+            logger.error(f"Kafka error for topic {topic}: {e}")
             return False
         except Exception as e:
-            logger.error(f"Erreur générale pour topic {topic}: {e}")
+            logger.error(f"General error for topic {topic}: {e}")
             return False
     
     def process_station_data(self, stations_data: Dict):
-        """Traite et envoie les données des stations vers Kafka"""
+        """Process and send station data to Kafka"""
         timestamp = datetime.now().isoformat()
         
         for station in stations_data['stations']:
             station_id = station['station_id']
             
-            # Données complètes de la station
+            # Full data of stations
             station_status = {
                 'station_id': station_id,
                 'name': station.get('name', ''),
@@ -86,14 +86,14 @@ class VelibKafkaProducer:
                 'ingestion_time': int(time.time())
             }
             
-            # Envoyer vers le topic principal
+            # Send to the main topic station_status
             self.send_to_kafka(
                 self.topics['station_status'],
                 station_id,
                 station_status
             )
             
-            # Envoyer vers les topics spécialisés
+            # Send to specialized topics : available_bikes and available_docks
             bikes_data = {
                 'station_id': station_id,
                 'available_bikes': station.get('num_bikes_available', 0),
@@ -123,28 +123,28 @@ class VelibKafkaProducer:
             )
     
     def run(self):
-        """Démarre la boucle principale de production"""
-        logger.info("Démarrage du producer Vélib'")
+        """Start the main production loop"""
+        logger.info("Starting Vélib' producer")
         
         def data_callback(stations_data):
-            """Callback appelé quand de nouvelles données arrivent"""
+            """Callback called when new data arrives"""
             try:
                 self.process_station_data(stations_data)
-                logger.info(f"Données traitées pour {len(stations_data['stations'])} stations")
+                logger.info(f"Data processed for {len(stations_data['stations'])} stations")
             except Exception as e:
-                logger.error(f"Erreur lors du traitement des données: {e}")
+                logger.error(f"Error while processing data: {e}")
         
         try:
-            # Démarrer le monitoring avec callback
+            # Start monitoring with callback
             self.api_client.monitor_stations(data_callback, self.update_interval)
         except KeyboardInterrupt:
-            logger.info("Arrêt du producer")
+            logger.info("Stopping Vélib' producer")
         finally:
             self.producer.close()
-            logger.info("Producer fermé")
+            logger.info("Kafka producer closed")
 
 def main():
-    """Fonction principale"""
+    """Main function to run the VelibKafkaProducer"""
     producer = VelibKafkaProducer()
     producer.run()
 

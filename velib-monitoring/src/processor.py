@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Processeur Python pour lire Kafka et écrire dans MongoDB
-Processeur simple et efficace pour éviter les problèmes de compatibilité
+Python processor to read from Kafka and write to MongoDB
+A simple and efficient processor to avoid compatibility issues
 """
 
 import os
@@ -13,14 +13,14 @@ import logging
 from typing import Dict, List, Any
 from datetime import datetime
 
-# Ajouter le chemin src au Python path
+# Add the src path to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from kafka import KafkaConsumer
 from utils.mongo_utils import MongoManager
 from dotenv import load_dotenv
 
-# Configuration du logging
+# Logging configuration
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -28,10 +28,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class VelibKafkaToMongoProcessor:
-    """Processeur simple Kafka vers MongoDB"""
+    """Processor Kafka to MongoDB"""
     
     def __init__(self):
-        # Charger les variables d'environnement
+        # Load environment variables
         load_dotenv()
         
         # Configuration Kafka
@@ -41,7 +41,7 @@ class VelibKafkaToMongoProcessor:
         self.mongo_uri = os.getenv('MONGODB_URI', 'mongodb://admin:password123@localhost:27017/?authSource=admin')
         self.mongo_db_name = os.getenv('MONGODB_DATABASE', 'velib_monitoring')
         
-        # Topics à traiter
+        # Topics to process
         self.topics = [
             'station_status_topic',
             'available_bikes_topic',
@@ -49,14 +49,14 @@ class VelibKafkaToMongoProcessor:
             'station_info_topic'
         ]
         
-        # Initialiser MongoDB
+        # Initialize MongoDB
         self.mongo_manager = MongoManager(self.mongo_uri, self.mongo_db_name)
         
-        logger.info(f"Processeur initialisé - Kafka: {self.kafka_servers}")
-        logger.info(f"Topics surveillés: {self.topics}")
+        logger.info(f"Processor initialized - Kafka: {self.kafka_servers}")
+        logger.info(f"Monitored topics: {self.topics}")
     
     def create_consumer(self, topics: List[str]) -> KafkaConsumer:
-        """Crée un consumer Kafka"""
+        """Creates a Kafka consumer"""
         return KafkaConsumer(
             *topics,
             bootstrap_servers=self.kafka_servers,
@@ -70,13 +70,13 @@ class VelibKafkaToMongoProcessor:
         )
     
     def process_station_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Traite et enrichit les données de station"""
+        """Processes and enriches station data"""
         processed = data.copy()
         
-        # Ajouter timestamp de traitement
+        # Add processing timestamp
         processed['processed_timestamp'] = datetime.utcnow().isoformat()
         
-        # Calculer des métriques
+        # Calculate metrics
         if 'num_bikes_available' in data and 'capacity' in data:
             bikes = int(data['num_bikes_available'])
             capacity = int(data['capacity'])
@@ -97,15 +97,15 @@ class VelibKafkaToMongoProcessor:
         return processed
     
     def save_to_mongo(self, topic: str, data: Dict[str, Any]):
-        """Sauvegarde les données dans MongoDB selon le topic"""
+        """Data saving in MongoDB depending on topic"""
         try:
             processed_data = self.process_station_data(data)
             
             if topic == 'station_status_topic':
-                # Données temps réel des stations
+                # Real-time station data
                 collection = self.mongo_manager.get_collection('stations_realtime')
                 
-                # Upsert basé sur station_id
+                # Upsert based on station_id
                 filter_query = {'station_id': processed_data.get('station_id')}
                 
                 collection.replace_one(
@@ -115,14 +115,14 @@ class VelibKafkaToMongoProcessor:
                 )
                 
             elif topic in ['available_bikes_topic', 'available_docks_topic']:
-                # Données de disponibilité - garder historique
+                # Availability data - keep historical records
                 collection = self.mongo_manager.get_collection('availability_history')
                 
                 processed_data['topic_source'] = topic
                 collection.insert_one(processed_data)
                 
             elif topic == 'station_info_topic':
-                # Informations statiques des stations
+                # Static station information
                 collection = self.mongo_manager.get_collection('stations_info')
                 
                 filter_query = {'station_id': processed_data.get('station_id')}
@@ -132,18 +132,17 @@ class VelibKafkaToMongoProcessor:
                     upsert=True
                 )
             
-            logger.debug(f"Données sauvegardées: {topic} - Station {processed_data.get('station_id', 'unknown')}")
+            logger.debug(f"Data saved: {topic} - Station {processed_data.get('station_id', 'unknown')}")
             
         except Exception as e:
-            logger.error(f"Erreur sauvegarde MongoDB pour {topic}: {e}")
+            logger.error(f"Error saving to MongoDB for topic {topic}: {e}")
     
     def process_messages(self):
-        """Traite les messages Kafka en continu"""
-        logger.info("🚀 Démarrage du processeur Kafka vers MongoDB")
+        """Processes Kafka messages continuously"""
+        logger.info("Starting Kafka to MongoDB processor")
         
         # Créer le consumer
         consumer = self.create_consumer(self.topics)
-        
         message_count = 0
         last_log_time = time.time()
         
@@ -157,32 +156,32 @@ class VelibKafkaToMongoProcessor:
                         self.save_to_mongo(topic, value)
                         message_count += 1
                         
-                        # Log périodique
+                        # Periodic log
                         current_time = time.time()
-                        if current_time - last_log_time > 30:  # Toutes les 30 secondes
-                            logger.info(f"📊 Messages traités: {message_count}")
+                        if current_time - last_log_time > 30:  # Each 30 seconds
+                            logger.info(f"Processed messages: {message_count}")
                             last_log_time = current_time
                             
-                            # Statistiques MongoDB
+                            # Stats MongoDB
                             stats = self.get_mongo_stats()
                             logger.info(f"📄 Documents MongoDB: {stats}")
                 
                 except json.JSONDecodeError as e:
-                    logger.error(f"Erreur décodage JSON: {e}")
+                    logger.error(f"Error decoding JSON: {e}")
                 except Exception as e:
-                    logger.error(f"Erreur traitement message: {e}")
+                    logger.error(f"Error processing message from topic: {e}")
                     
         except KeyboardInterrupt:
-            logger.info("🛑 Arrêt demandé par l'utilisateur")
+            logger.info("Stop requested by the user")
         except Exception as e:
-            logger.error(f"❌ Erreur dans le processeur: {e}")
+            logger.error(f"Error in the processor: {e}")
         finally:
-            logger.info("🔄 Fermeture du consumer Kafka")
+            logger.info("Closing Kafka consumer")
             consumer.close()
             self.mongo_manager.close()
     
     def get_mongo_stats(self) -> Dict[str, int]:
-        """Récupère les statistiques MongoDB"""
+        """Fetches MongoDB statistics"""
         try:
             stats = {}
             collections = ['stations_realtime', 'availability_history', 'stations_info']
@@ -194,11 +193,11 @@ class VelibKafkaToMongoProcessor:
                 
             return stats
         except Exception as e:
-            logger.error(f"Erreur récupération stats: {e}")
+            logger.error(f"Error retrieving stats: {e}")
             return {}
 
 def main():
-    """Fonction principale"""
+    """Main function"""
     processor = VelibKafkaToMongoProcessor()
     processor.process_messages()
 

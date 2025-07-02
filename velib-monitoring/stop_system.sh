@@ -95,7 +95,7 @@ main() {
     # Arrêter par nom de processus (au cas où)
     stop_by_name "velib_producer.py"
     stop_by_name "processor.py"
-    stop_by_name "streamlit.*streamlit_simple.py"
+    stop_by_name "streamlit.py"
     
     # Arrêter les services Docker
     print_status "Arrêt des services Docker..."

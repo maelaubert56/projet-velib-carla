@@ -5,22 +5,22 @@ import json
 import logging
 from typing import List, Dict, Any
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class KafkaManager:
-    """Gestionnaire pour les opérations Kafka"""
-    # Initialisation du gestionnaire Kafka -> client KafkaAdmin
+    """Manager for Kafka operations"""
+    # Init of Kafka Manager -> client KafkaAdmin
     def __init__(self, bootstrap_servers: str = 'localhost:9092'):
         self.bootstrap_servers = bootstrap_servers
         self.admin_client = KafkaAdminClient(
             bootstrap_servers=bootstrap_servers,
             client_id='velib_admin'
         )
-    # Création des topics Kafka -> Q1
+    
     def create_topics(self, topics: List[Dict[str, Any]]) -> bool:
-        #Crée les topics Kafka via une liste
+        #Create Kafka topics via a list
         topic_list = []
-        # config des topics -> def
         for topic in topics:
             topic = NewTopic(
                 name=topic['name'],
@@ -31,15 +31,14 @@ class KafkaManager:
 
         try:
             fs = self.admin_client.create_topics(new_topics=topic_list, validate_only=False)
-            print(f"Topics créés : {[topic.name for topic in topic_list]}")
+            print(f"Topics created : {[topic.name for topic in topic_list]}")
             return True
         except Exception as e:
-            print(f"Erreur lors de la création des topics: {e}")
+            print(f"Error during creation of topics: {e}")
             return False
     
-    # sert à checker si les topics existent déjà -> intéressant pour print
     def list_topics(self) -> List[str]:
-        """Liste tous les topics disponibles"""
+        """Lists all available topics"""
         try:
             from kafka import KafkaConsumer
             consumer = KafkaConsumer(bootstrap_servers=self.bootstrap_servers)
@@ -47,11 +46,11 @@ class KafkaManager:
             consumer.close()
             return list(topics)
         except Exception as e:
-            print(f"Erreur lors de la récupération des topics: {e}")
+            print(f"Error while retrieving topics: {e}")
             return []
     
     def create_producer(self, **kwargs) -> KafkaProducer:
-        """Crée un producer Kafka avec la configuration par défaut"""
+        """Creates a Kafka producer with default configuration"""
         default_config = {
             'bootstrap_servers': self.bootstrap_servers,
             'value_serializer': lambda v: json.dumps(v).encode('utf-8'),
@@ -61,13 +60,11 @@ class KafkaManager:
             'max_in_flight_requests_per_connection': 1
         }
         
-        # Fusionner avec la configuration personnalisée
         default_config.update(kwargs)
-        
         return KafkaProducer(**default_config)
     
     def create_consumer(self, topics: List[str], group_id: str, **kwargs) -> KafkaConsumer:
-        """Crée un consumer Kafka avec la configuration par défaut"""
+        """Creates a Kafka consumer with default configuration"""
         default_config = {
             'bootstrap_servers': self.bootstrap_servers,
             'group_id': group_id,
@@ -78,30 +75,28 @@ class KafkaManager:
             'auto_commit_interval_ms': 1000
         }
         
-        # Fusionner avec la configuration personnalisée
         default_config.update(kwargs)
-        
         return KafkaConsumer(*topics, **default_config)
     
     def check_connection(self) -> bool:
-        """Vérifie la connexion au cluster Kafka"""
+        """Checks the connection to the Kafka cluster"""
         try:
             topics = self.list_topics()
-            print(f"Connexion Kafka OK. Topics disponibles: {len(topics)}")
+            print(f"Kafka connection successful. Available topics: {len(topics)}")
             return True
         except Exception as e:
-            print(f"Erreur de connexion Kafka: {e}")
+            print(f"Kafka connection error: {e}")
             return False
     
     def close(self):
-        """Ferme les connexions"""
+        """Closes connections"""
         try:
             self.admin_client.close()
         except Exception as e:
-            logger.error(f"Erreur lors de la fermeture: {e}")
+            logger.error(f"Error while closing: {e}")
 
 def get_velib_topics_config() -> List[Dict[str, Any]]:
-    """Retourne la configuration des topics Vélib'"""
+    """Returns the configuration for Vélib' topics"""
     return [
         {
             'name': 'station_status_topic',
